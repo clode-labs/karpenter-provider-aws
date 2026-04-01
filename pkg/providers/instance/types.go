@@ -153,6 +153,7 @@ type CreateFleetInputBuilder struct {
 	capacityReservationType          v1.CapacityReservationType
 	capacityReservationInterruptible bool
 	overlay                          bool
+	spotAllocationStrategy           *string
 }
 
 func NewCreateFleetInputBuilder(capacityType string, tags map[string]string, launchTemplateConfigs []ec2types.FleetLaunchTemplateConfigRequest) *CreateFleetInputBuilder {
@@ -178,6 +179,11 @@ func (b *CreateFleetInputBuilder) WithContextID(contextID string) *CreateFleetIn
 
 func (b *CreateFleetInputBuilder) WithOverlay() *CreateFleetInputBuilder {
 	b.overlay = true
+	return b
+}
+
+func (b *CreateFleetInputBuilder) WithSpotAllocationStrategy(strategy *string) *CreateFleetInputBuilder {
+	b.spotAllocationStrategy = strategy
 	return b
 }
 
@@ -218,8 +224,14 @@ func (b *CreateFleetInputBuilder) Build() *ec2.CreateFleetInput {
 		TagSpecifications: b.tagSpecifications,
 	}
 	if b.capacityType == karpv1.CapacityTypeSpot {
+		var spotStrategy ec2types.SpotAllocationStrategy
+		if b.spotAllocationStrategy != nil {
+			spotStrategy = ec2types.SpotAllocationStrategy(*b.spotAllocationStrategy)
+		} else {
+			spotStrategy = lo.Ternary(b.overlay, ec2types.SpotAllocationStrategyCapacityOptimizedPrioritized, ec2types.SpotAllocationStrategyPriceCapacityOptimized)
+		}
 		input.SpotOptions = &ec2types.SpotOptionsRequest{
-			AllocationStrategy: lo.Ternary(b.overlay, ec2types.SpotAllocationStrategyCapacityOptimizedPrioritized, ec2types.SpotAllocationStrategyPriceCapacityOptimized),
+			AllocationStrategy: spotStrategy,
 		}
 	} else if b.capacityReservationInterruptible {
 		input.ReservedCapacityOptions = &ec2types.ReservedCapacityOptionsRequest{

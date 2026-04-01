@@ -87,6 +87,7 @@ type LaunchTemplate struct {
 	CapacityReservationType          v1.CapacityReservationType
 	CapacityReservationInterruptible bool
 	Tenancy                          string
+	CpuOptions                       *v1.CpuOptions
 }
 
 // AMIFamily can be implemented to override the default logic for generating dynamic launch template parameters
@@ -319,6 +320,7 @@ func (r DefaultResolver) resolveLaunchTemplates(
 			CapacityReservationType:          capacityReservationType,
 			CapacityReservationInterruptible: capacityReservationInterruptible,
 			Tenancy:                          tenancyType,
+			CpuOptions:                       nodeClass.Spec.CpuOptions,
 		}
 		if len(resolved.BlockDeviceMappings) == 0 {
 			resolved.BlockDeviceMappings = amiFamily.DefaultBlockDeviceMappings()

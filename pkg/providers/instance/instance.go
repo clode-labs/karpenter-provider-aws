@@ -326,6 +326,9 @@ func (p *DefaultProvider) launchInstance(
 	}
 
 	cfiBuilder := NewCreateFleetInputBuilder(capacityType, tags, launchTemplateConfigs)
+	if nodeClass.Spec.SpotAllocationStrategy != nil {
+		cfiBuilder.WithSpotAllocationStrategy(nodeClass.Spec.SpotAllocationStrategy)
+	}
 	if _, ok := nodeClaim.Annotations[v1alpha1.PriceOverlayAppliedAnnotationKey]; ok {
 		cfiBuilder.WithOverlay()
 	}

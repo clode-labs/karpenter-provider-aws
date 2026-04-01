@@ -143,6 +143,16 @@ type EC2NodeClassSpec struct {
 	// https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateFleet.html
 	// +optional
 	Context *string `json:"context,omitempty"`
+	// CpuOptions for the generated launch template of provisioned nodes.
+	// +optional
+	CpuOptions *CpuOptions `json:"cpuOptions,omitempty"`
+	// SpotAllocationStrategy controls the EC2 Fleet allocation strategy used when provisioning
+	// spot instances. Each EC2NodeClass can specify its own strategy, so NodePools referencing
+	// different EC2NodeClasses can use different strategies.
+	// If omitted, Karpenter uses "price-capacity-optimized" by default.
+	// +kubebuilder:validation:Enum:={"lowest-price","diversified","capacity-optimized","capacity-optimized-prioritized","price-capacity-optimized"}
+	// +optional
+	SpotAllocationStrategy *string `json:"spotAllocationStrategy,omitempty"`
 }
 
 // SubnetSelectorTerm defines selection logic for a subnet used by Karpenter to launch nodes.
@@ -354,6 +364,35 @@ type MetadataOptions struct {
 	// +kubebuilder:validation:Enum:={required,optional}
 	// +optional
 	HTTPTokens *string `json:"httpTokens,omitempty"`
+}
+
+// CpuOptions contains parameters for configuring CPU options on provisioned EC2 nodes.
+// These map directly to the EC2 LaunchTemplate CpuOptions.
+// https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_LaunchTemplateCpuOptionsRequest.html
+type CpuOptions struct {
+	// CoreCount is the number of CPU cores for the instance. Check the instance type documentation
+	// for supported values.
+	// +kubebuilder:validation:Minimum:=1
+	// +optional
+	CoreCount *int32 `json:"coreCount,omitempty"`
+	// ThreadsPerCore is the number of threads per CPU core. To disable multithreading (hyper-threading),
+	// specify a value of 1. Otherwise, specify the default value of 2.
+	// +kubebuilder:validation:Enum:={1,2}
+	// +optional
+	ThreadsPerCore *int32 `json:"threadsPerCore,omitempty"`
+	// AmdSevSnp enables or disables AMD SEV-SNP on the instance.
+	// AMD SEV-SNP is supported with M6a, R6a, and C6a instance types only.
+	// +kubebuilder:validation:Enum:={enabled,disabled}
+	// +optional
+	AmdSevSnp *string `json:"amdSevSnp,omitempty"`
+	// NestedVirtualization enables or disables nested virtualization on the instance.
+	// Nested virtualization is supported only on 8th generation Intel-based instance types
+	// (c8i, m8i, r8i, and their flex variants).
+	// When enabled, /dev/kvm is available inside the instance for running hypervisors like
+	// Firecracker or QEMU.
+	// +kubebuilder:validation:Enum:={enabled,disabled}
+	// +optional
+	NestedVirtualization *string `json:"nestedVirtualization,omitempty"`
 }
 
 type BlockDeviceMapping struct {
