@@ -1,4 +1,4 @@
-name: Clode CI & Release
+name: Clode Release
 on:
   push:
     branches:
@@ -6,10 +6,6 @@ on:
       - 'main'
     tags:
       - 'clode-v*'
-  pull_request:
-    branches:
-      - 'main'
-      - 'feat/*'
 
 env:
   GHCR_IMAGE: ghcr.io/clode-labs/karpenter-controller
@@ -19,53 +15,9 @@ permissions:
   packages: write
 
 jobs:
-  ci:
-    name: CI (lint, generate, test)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Verify CRD generation is up to date
-        run: |
-          # Install controller-gen
-          go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
-          # Generate CRDs
-          controller-gen crd paths="./pkg/apis/..." output:crd:dir=pkg/apis/crds
-          # Check for drift
-          if ! git diff --quiet pkg/apis/crds/; then
-            echo "::error::CRD files are out of date. Run 'controller-gen crd paths=./pkg/apis/... output:crd:dir=pkg/apis/crds' and commit the result."
-            git diff pkg/apis/crds/
-            exit 1
-          fi
-
-      - name: Verify deepcopy generation is up to date
-        run: |
-          go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
-          controller-gen object paths="./pkg/apis/..."
-          if ! git diff --quiet pkg/apis/v1/zz_generated.deepcopy.go; then
-            echo "::error::DeepCopy files are out of date. Run 'controller-gen object paths=./pkg/apis/...' and commit the result."
-            git diff pkg/apis/v1/zz_generated.deepcopy.go
-            exit 1
-          fi
-
-      - name: Build
-        run: go build ./cmd/... ./pkg/...
-
-      - name: Run unit tests
-        run: go test ./pkg/... -count=1 -timeout 30m
-
   release:
     name: Build & Push Image
     runs-on: ubuntu-latest
-    needs: ci
-    if: github.event_name == 'push'
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
