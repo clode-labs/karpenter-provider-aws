@@ -37,9 +37,11 @@ jobs:
 
       - name: Determine image tag
         id: tag
+        env:
+          GIT_REF: ${{ github.ref }}
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/clode-v* ]]; then
-            TAG="${GITHUB_REF#refs/tags/clode-}"
+          if [[ "${GIT_REF}" == refs/tags/clode-v* ]]; then
+            TAG="${GIT_REF#refs/tags/clode-}"
             echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
             echo "latest=true" >> "$GITHUB_OUTPUT"
           else
@@ -49,17 +51,22 @@ jobs:
           fi
 
       - name: Build and push with ko
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
+          IS_LATEST: ${{ steps.tag.outputs.latest }}
+          KO_DOCKER_REPO: ${{ env.GHCR_IMAGE }}
         run: |
-          TAGS="${{ steps.tag.outputs.tag }}"
-          if [[ "${{ steps.tag.outputs.latest }}" == "true" ]]; then
+          TAGS="${IMAGE_TAG}"
+          if [[ "${IS_LATEST}" == "true" ]]; then
             TAGS="${TAGS},latest"
           fi
-          KO_DOCKER_REPO=${{ env.GHCR_IMAGE }} \
           ko build --bare --tags "${TAGS}" \
             --platform linux/amd64 \
             github.com/aws/karpenter-provider-aws/cmd/controller
 
       - name: Output image
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           echo "### Image Published" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`${KO_DOCKER_REPO}:${IMAGE_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
