@@ -1,0 +1,81 @@
+name: Clode Build & Release
+on:
+  push:
+    branches:
+      - 'feat/*'
+      - 'main'
+    tags:
+      - 'clode-v*'
+  pull_request:
+    branches:
+      - 'main'
+      - 'feat/*'
+
+env:
+  AWS_REGION: eu-west-2
+  ECR_REPOSITORY: 834379228613.dkr.ecr.eu-west-2.amazonaws.com/karpenter-controller
+  KO_DOCKER_REPO: 834379228613.dkr.ecr.eu-west-2.amazonaws.com/karpenter-controller
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run unit tests
+        run: go test ./pkg/... -count=1 -timeout 30m
+        env:
+          CGO_ENABLED: 0
+
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install ko
+        run: go install github.com/google/ko@latest
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::834379228613:role/github-actions-ecr-push
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        run: aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin 834379228613.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/clode-v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/clode-}" >> "$GITHUB_OUTPUT"
+          else
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            echo "tag=dev-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push with ko
+        run: |
+          KO_DOCKER_REPO=${{ env.ECR_REPOSITORY }} \
+          ko build --bare --tags ${{ steps.tag.outputs.tag }} \
+            github.com/aws/karpenter-provider-aws/cmd/controller
+        env:
+          GOFLAGS: "-tags=disable_aws_sdk_go_v1"
+
+      - name: Output image
+        run: echo "Image pushed - ${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.tag }}"
