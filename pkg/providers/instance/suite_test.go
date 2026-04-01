@@ -596,4 +596,77 @@ var _ = Describe("InstanceProvider", func() {
 
 		Expect(priotiztied.SpotOptions.AllocationStrategy).To(Equal(ec2types.SpotAllocationStrategyPriceCapacityOptimized))
 	})
+	It("should use custom spot allocation strategy from EC2NodeClass when specified", func() {
+		nodeClass.Spec.SpotAllocationStrategy = lo.ToPtr("lowest-price")
+		nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
+			{
+				Key:      karpv1.CapacityTypeLabelKey,
+				Operator: corev1.NodeSelectorOpIn,
+				Values: []string{
+					"spot",
+				},
+			},
+		}
+		ExpectApplied(ctx, env.Client, nodeClaim, nodePool, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+		instanceTypes, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
+		Expect(err).ToNot(HaveOccurred())
+
+		_, err = awsEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, nil, instanceTypes)
+		Expect(err).To(BeNil())
+
+		Expect(awsEnv.EC2API.CreateFleetBehavior.CalledWithInput.Len()).To(BeNumerically("==", 1))
+		fleetInput := awsEnv.EC2API.CreateFleetBehavior.CalledWithInput.Pop()
+
+		Expect(fleetInput.SpotOptions.AllocationStrategy).To(Equal(ec2types.SpotAllocationStrategyLowestPrice))
+	})
+	It("should use custom capacity-optimized spot allocation strategy from EC2NodeClass", func() {
+		nodeClass.Spec.SpotAllocationStrategy = lo.ToPtr("capacity-optimized")
+		nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
+			{
+				Key:      karpv1.CapacityTypeLabelKey,
+				Operator: corev1.NodeSelectorOpIn,
+				Values: []string{
+					"spot",
+				},
+			},
+		}
+		ExpectApplied(ctx, env.Client, nodeClaim, nodePool, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+		instanceTypes, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
+		Expect(err).ToNot(HaveOccurred())
+
+		_, err = awsEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, nil, instanceTypes)
+		Expect(err).To(BeNil())
+
+		Expect(awsEnv.EC2API.CreateFleetBehavior.CalledWithInput.Len()).To(BeNumerically("==", 1))
+		fleetInput := awsEnv.EC2API.CreateFleetBehavior.CalledWithInput.Pop()
+
+		Expect(fleetInput.SpotOptions.AllocationStrategy).To(Equal(ec2types.SpotAllocationStrategyCapacityOptimized))
+	})
+	It("should override spot allocation strategy even when overlay is set", func() {
+		nodeClass.Spec.SpotAllocationStrategy = lo.ToPtr("diversified")
+		nodeClaim.Annotations = map[string]string{v1alpha1.PriceOverlayAppliedAnnotationKey: "true"}
+		nodeClaim.Spec.Requirements = []karpv1.NodeSelectorRequirementWithMinValues{
+			{
+				Key:      karpv1.CapacityTypeLabelKey,
+				Operator: corev1.NodeSelectorOpIn,
+				Values: []string{
+					"spot",
+				},
+			},
+		}
+		ExpectApplied(ctx, env.Client, nodeClaim, nodePool, nodeClass)
+		nodeClass = ExpectExists(ctx, env.Client, nodeClass)
+		instanceTypes, err := cloudProvider.GetInstanceTypes(ctx, nodePool)
+		Expect(err).ToNot(HaveOccurred())
+
+		_, err = awsEnv.InstanceProvider.Create(ctx, nodeClass, nodeClaim, nil, instanceTypes)
+		Expect(err).To(BeNil())
+
+		Expect(awsEnv.EC2API.CreateFleetBehavior.CalledWithInput.Len()).To(BeNumerically("==", 1))
+		fleetInput := awsEnv.EC2API.CreateFleetBehavior.CalledWithInput.Pop()
+
+		Expect(fleetInput.SpotOptions.AllocationStrategy).To(Equal(ec2types.SpotAllocationStrategyDiversified))
+	})
 })

@@ -2523,6 +2523,86 @@ eviction-max-pod-grace-period = 10
 			Entry("when dedicated specified", lo.ToPtr("dedicated"), ec2types.TenancyDedicated),
 		)
 	})
+	Context("CpuOptions", func() {
+		It("should not set CpuOptions on the launch template when not specified", func() {
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			pod := coretest.UnschedulablePod()
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectScheduled(ctx, env.Client, pod)
+			awsEnv.EC2API.CreateLaunchTemplateBehavior.CalledWithInput.ForEach(func(ltInput *ec2.CreateLaunchTemplateInput) {
+				Expect(ltInput.LaunchTemplateData.CpuOptions).To(BeNil())
+			})
+		})
+		It("should set nested virtualization on the launch template when specified", func() {
+			nodeClass.Spec.CpuOptions = &v1.CpuOptions{
+				NestedVirtualization: lo.ToPtr("enabled"),
+			}
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			pod := coretest.UnschedulablePod()
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectScheduled(ctx, env.Client, pod)
+			awsEnv.EC2API.CreateLaunchTemplateBehavior.CalledWithInput.ForEach(func(ltInput *ec2.CreateLaunchTemplateInput) {
+				Expect(ltInput.LaunchTemplateData.CpuOptions).ToNot(BeNil())
+				Expect(ltInput.LaunchTemplateData.CpuOptions.NestedVirtualization).To(Equal(ec2types.NestedVirtualizationSpecificationEnabled))
+			})
+		})
+		It("should set threads per core on the launch template when specified", func() {
+			nodeClass.Spec.CpuOptions = &v1.CpuOptions{
+				ThreadsPerCore: lo.ToPtr(int32(1)),
+			}
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			pod := coretest.UnschedulablePod()
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectScheduled(ctx, env.Client, pod)
+			awsEnv.EC2API.CreateLaunchTemplateBehavior.CalledWithInput.ForEach(func(ltInput *ec2.CreateLaunchTemplateInput) {
+				Expect(ltInput.LaunchTemplateData.CpuOptions).ToNot(BeNil())
+				Expect(lo.FromPtr(ltInput.LaunchTemplateData.CpuOptions.ThreadsPerCore)).To(BeNumerically("==", 1))
+			})
+		})
+		It("should set core count on the launch template when specified", func() {
+			nodeClass.Spec.CpuOptions = &v1.CpuOptions{
+				CoreCount: lo.ToPtr(int32(4)),
+			}
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			pod := coretest.UnschedulablePod()
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectScheduled(ctx, env.Client, pod)
+			awsEnv.EC2API.CreateLaunchTemplateBehavior.CalledWithInput.ForEach(func(ltInput *ec2.CreateLaunchTemplateInput) {
+				Expect(ltInput.LaunchTemplateData.CpuOptions).ToNot(BeNil())
+				Expect(lo.FromPtr(ltInput.LaunchTemplateData.CpuOptions.CoreCount)).To(BeNumerically("==", 4))
+			})
+		})
+		It("should set AMD SEV-SNP on the launch template when specified", func() {
+			nodeClass.Spec.CpuOptions = &v1.CpuOptions{
+				AmdSevSnp: lo.ToPtr("enabled"),
+			}
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			pod := coretest.UnschedulablePod()
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectScheduled(ctx, env.Client, pod)
+			awsEnv.EC2API.CreateLaunchTemplateBehavior.CalledWithInput.ForEach(func(ltInput *ec2.CreateLaunchTemplateInput) {
+				Expect(ltInput.LaunchTemplateData.CpuOptions).ToNot(BeNil())
+				Expect(ltInput.LaunchTemplateData.CpuOptions.AmdSevSnp).To(Equal(ec2types.AmdSevSnpSpecificationEnabled))
+			})
+		})
+		It("should set multiple CpuOptions fields on the launch template when specified", func() {
+			nodeClass.Spec.CpuOptions = &v1.CpuOptions{
+				NestedVirtualization: lo.ToPtr("enabled"),
+				ThreadsPerCore:      lo.ToPtr(int32(2)),
+				CoreCount:           lo.ToPtr(int32(8)),
+			}
+			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
+			pod := coretest.UnschedulablePod()
+			ExpectProvisioned(ctx, env.Client, cluster, cloudProvider, prov, pod)
+			ExpectScheduled(ctx, env.Client, pod)
+			awsEnv.EC2API.CreateLaunchTemplateBehavior.CalledWithInput.ForEach(func(ltInput *ec2.CreateLaunchTemplateInput) {
+				Expect(ltInput.LaunchTemplateData.CpuOptions).ToNot(BeNil())
+				Expect(ltInput.LaunchTemplateData.CpuOptions.NestedVirtualization).To(Equal(ec2types.NestedVirtualizationSpecificationEnabled))
+				Expect(lo.FromPtr(ltInput.LaunchTemplateData.CpuOptions.ThreadsPerCore)).To(BeNumerically("==", 2))
+				Expect(lo.FromPtr(ltInput.LaunchTemplateData.CpuOptions.CoreCount)).To(BeNumerically("==", 8))
+			})
+		})
+	})
 	It("should generate a unique launch template per capacity reservation", func() {
 		crs := []ec2types.CapacityReservation{
 			{

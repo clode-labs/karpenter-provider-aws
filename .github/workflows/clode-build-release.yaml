@@ -1,4 +1,4 @@
-name: Clode Build & Release
+name: Clode CI & Release
 on:
   push:
     branches:
@@ -12,17 +12,15 @@ on:
       - 'feat/*'
 
 env:
-  AWS_REGION: eu-west-2
-  ECR_REPOSITORY: 834379228613.dkr.ecr.eu-west-2.amazonaws.com/karpenter-controller
-  KO_DOCKER_REPO: 834379228613.dkr.ecr.eu-west-2.amazonaws.com/karpenter-controller
+  GHCR_IMAGE: ghcr.io/clode-labs/karpenter-controller
 
 permissions:
-  id-token: write
   contents: read
+  packages: write
 
 jobs:
-  test:
-    name: Test
+  ci:
+    name: CI (lint, generate, test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,16 +28,44 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Verify CRD generation is up to date
+        run: |
+          # Install controller-gen
+          go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+          # Generate CRDs
+          controller-gen crd paths="./pkg/apis/..." output:crd:dir=pkg/apis/crds
+          # Check for drift
+          if ! git diff --quiet pkg/apis/crds/; then
+            echo "::error::CRD files are out of date. Run 'controller-gen crd paths=./pkg/apis/... output:crd:dir=pkg/apis/crds' and commit the result."
+            git diff pkg/apis/crds/
+            exit 1
+          fi
+
+      - name: Verify deepcopy generation is up to date
+        run: |
+          go install sigs.k8s.io/controller-tools/cmd/controller-gen@latest
+          controller-gen object paths="./pkg/apis/..."
+          if ! git diff --quiet pkg/apis/v1/zz_generated.deepcopy.go; then
+            echo "::error::DeepCopy files are out of date. Run 'controller-gen object paths=./pkg/apis/...' and commit the result."
+            git diff pkg/apis/v1/zz_generated.deepcopy.go
+            exit 1
+          fi
+
+      - name: Build
+        run: go build ./cmd/... ./pkg/...
+
       - name: Run unit tests
         run: go test ./pkg/... -count=1 -timeout 30m
-        env:
-          CGO_ENABLED: 0
 
-  build:
-    name: Build & Push
+  release:
+    name: Build & Push Image
     runs-on: ubuntu-latest
-    needs: test
+    needs: ci
     if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -50,32 +76,38 @@ jobs:
       - name: Install ko
         run: go install github.com/google/ko@latest
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          role-to-assume: arn:aws:iam::834379228613:role/github-actions-ecr-push
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to ECR
-        run: aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin 834379228613.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine image tag
         id: tag
         run: |
           if [[ "${{ github.ref }}" == refs/tags/clode-v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/clode-}" >> "$GITHUB_OUTPUT"
+            TAG="${GITHUB_REF#refs/tags/clode-}"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "latest=true" >> "$GITHUB_OUTPUT"
           else
             SHORT_SHA=$(git rev-parse --short HEAD)
             echo "tag=dev-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+            echo "latest=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build and push with ko
         run: |
-          KO_DOCKER_REPO=${{ env.ECR_REPOSITORY }} \
-          ko build --bare --tags ${{ steps.tag.outputs.tag }} \
+          TAGS="${{ steps.tag.outputs.tag }}"
+          if [[ "${{ steps.tag.outputs.latest }}" == "true" ]]; then
+            TAGS="${TAGS},latest"
+          fi
+          KO_DOCKER_REPO=${{ env.GHCR_IMAGE }} \
+          ko build --bare --tags "${TAGS}" \
+            --platform linux/amd64 \
             github.com/aws/karpenter-provider-aws/cmd/controller
-        env:
-          GOFLAGS: "-tags=disable_aws_sdk_go_v1"
 
       - name: Output image
-        run: echo "Image pushed - ${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.tag }}"
+        run: |
+          echo "### Image Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
