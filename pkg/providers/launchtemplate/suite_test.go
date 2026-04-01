@@ -2588,8 +2588,8 @@ eviction-max-pod-grace-period = 10
 		It("should set multiple CpuOptions fields on the launch template when specified", func() {
 			nodeClass.Spec.CpuOptions = &v1.CpuOptions{
 				NestedVirtualization: lo.ToPtr("enabled"),
-				ThreadsPerCore:      lo.ToPtr(int32(2)),
-				CoreCount:           lo.ToPtr(int32(8)),
+				ThreadsPerCore:       lo.ToPtr(int32(2)),
+				CoreCount:            lo.ToPtr(int32(8)),
 			}
 			ExpectApplied(ctx, env.Client, nodePool, nodeClass)
 			pod := coretest.UnschedulablePod()
