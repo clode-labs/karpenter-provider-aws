@@ -1,0 +1,67 @@
+name: Clode Build & Release
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+-clode.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and push (e.g. v1.3.0-clode.1)'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/controller
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@c4a742cab115ed795e34d4513e2cf7d472deb55f # v3.3.1
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up ko
+        uses: ko-build/setup-ko@d006021bd0c28d1ce33a07e7943d48b079d11fbf # v0.9
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ -n "${INPUT_TAG}" ]; then
+            echo "tag=${INPUT_TAG}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
+          fi
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push controller image
+        run: |
+          VERSION="${TAG#v}"
+          KO_DOCKER_REPO="${REGISTRY}/${IMAGE_NAME}" \
+            ko build --bare \
+            --tags "${TAG}" \
+            --platform linux/amd64,linux/arm64 \
+            -t latest \
+            --image-label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --image-label "org.opencontainers.image.version=${VERSION}" \
+            github.com/aws/karpenter-provider-aws/cmd/controller
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          GOFLAGS: -ldflags=-X=sigs.k8s.io/karpenter/pkg/operator.Version=${{ steps.tag.outputs.tag }}
