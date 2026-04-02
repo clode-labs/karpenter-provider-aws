@@ -16,4 +16,4 @@ go.work.sum
 *.csv
 
 # Binary output
-karpenter-provider-aws-*
+karpenter-provider-aws-*.worktrees/

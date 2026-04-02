@@ -25,13 +25,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@c4a742cab115ed795e34d4513e2cf7d472deb55f # v3.3.1
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Set up ko
-        uses: ko-build/setup-ko@d006021bd0c28d1ce33a07e7943d48b079d11fbf # v0.9
+      - name: Install ko
+        run: go install github.com/google/ko@latest
 
       - name: Determine tag
         id: tag
