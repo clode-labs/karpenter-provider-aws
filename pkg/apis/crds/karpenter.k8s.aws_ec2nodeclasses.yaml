@@ -297,6 +297,36 @@ spec:
                     Context is a Reserved field in EC2 APIs
                     https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateFleet.html
                   type: string
+                cpuOptions:
+                  description: CpuOptions for the generated launch template of provisioned nodes.
+                  properties:
+                    amdSevSnp:
+                      description: AmdSevSnp enables or disables AMD SEV-SNP. Supported with M6a, R6a, C6a.
+                      enum:
+                        - enabled
+                        - disabled
+                      type: string
+                    coreCount:
+                      description: CoreCount is the number of CPU cores for the instance.
+                      format: int32
+                      minimum: 1
+                      type: integer
+                    nestedVirtualization:
+                      description: |-
+                        NestedVirtualization enables or disables nested virtualization.
+                        Supported on c8i, m8i, r8i and flex variants.
+                      enum:
+                        - enabled
+                        - disabled
+                      type: string
+                    threadsPerCore:
+                      description: ThreadsPerCore is the number of threads per CPU core. 1 disables hyperthreading, 2 is default.
+                      enum:
+                        - 1
+                        - 2
+                      format: int32
+                      type: integer
+                  type: object
                 detailedMonitoring:
                   description: DetailedMonitoring controls if detailed monitoring is enabled for instances that are launched
                   type: boolean
@@ -595,6 +625,19 @@ spec:
                       rule: '!self.all(x, has(x.id) && (has(x.tags) || has(x.name)))'
                     - message: '''name'' is mutually exclusive, cannot be set with a combination of other fields in a security group selector term'
                       rule: '!self.all(x, has(x.name) && (has(x.tags) || has(x.id)))'
+                spotAllocationStrategy:
+                  description: |-
+                    SpotAllocationStrategy controls the EC2 Fleet allocation strategy used when provisioning
+                    spot instances. Each EC2NodeClass can specify its own strategy, so NodePools referencing
+                    different EC2NodeClasses can use different strategies.
+                    If omitted, Karpenter uses "price-capacity-optimized" by default.
+                  enum:
+                    - lowest-price
+                    - diversified
+                    - capacity-optimized
+                    - capacity-optimized-prioritized
+                    - price-capacity-optimized
+                  type: string
                 subnetSelectorTerms:
                   description: SubnetSelectorTerms is a list of subnet selector terms. The terms are ORed.
                   items:

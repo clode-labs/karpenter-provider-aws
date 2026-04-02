@@ -150,6 +150,16 @@ type EC2NodeClassSpec struct {
 	// https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CreateFleet.html
 	// +optional
 	Context *string `json:"context,omitempty"`
+	// CpuOptions for the generated launch template of provisioned nodes.
+	// +optional
+	CpuOptions *CpuOptions `json:"cpuOptions,omitempty"`
+	// SpotAllocationStrategy controls the EC2 Fleet allocation strategy used when provisioning
+	// spot instances. Each EC2NodeClass can specify its own strategy, so NodePools referencing
+	// different EC2NodeClasses can use different strategies.
+	// If omitted, Karpenter uses "price-capacity-optimized" by default.
+	// +kubebuilder:validation:Enum:={"lowest-price","diversified","capacity-optimized","capacity-optimized-prioritized","price-capacity-optimized"}
+	// +optional
+	SpotAllocationStrategy *string `json:"spotAllocationStrategy,omitempty"`
 }
 
 // SubnetSelectorTerm defines selection logic for a subnet used by Karpenter to launch nodes.
@@ -361,6 +371,29 @@ type MetadataOptions struct {
 	// +kubebuilder:validation:Enum:={required,optional}
 	// +optional
 	HTTPTokens *string `json:"httpTokens,omitempty"`
+}
+
+// CpuOptions contains parameters for configuring CPU options on provisioned EC2 nodes.
+// These map directly to the EC2 LaunchTemplate CpuOptions.
+// https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_LaunchTemplateCpuOptionsRequest.html
+type CpuOptions struct {
+	// CoreCount is the number of CPU cores for the instance.
+	// +kubebuilder:validation:Minimum:=1
+	// +optional
+	CoreCount *int32 `json:"coreCount,omitempty"`
+	// ThreadsPerCore is the number of threads per CPU core. 1 disables hyperthreading, 2 is default.
+	// +kubebuilder:validation:Enum:={1,2}
+	// +optional
+	ThreadsPerCore *int32 `json:"threadsPerCore,omitempty"`
+	// AmdSevSnp enables or disables AMD SEV-SNP. Supported with M6a, R6a, C6a.
+	// +kubebuilder:validation:Enum:={enabled,disabled}
+	// +optional
+	AmdSevSnp *string `json:"amdSevSnp,omitempty"`
+	// NestedVirtualization enables or disables nested virtualization.
+	// Supported on c8i, m8i, r8i and flex variants.
+	// +kubebuilder:validation:Enum:={enabled,disabled}
+	// +optional
+	NestedVirtualization *string `json:"nestedVirtualization,omitempty"`
 }
 
 type BlockDeviceMapping struct {

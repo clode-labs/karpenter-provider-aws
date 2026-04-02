@@ -144,6 +144,30 @@ func (b *CreateLaunchTemplateInputBuilder) Build(ctx context.Context) *ec2.Creat
 			},
 		},
 	}
+	// Set CpuOptions on the launch template if configured in the EC2NodeClass
+	if b.options.CpuOptions != nil {
+		cpuOpts := &ec2types.LaunchTemplateCpuOptionsRequest{}
+		hasCpuOpts := false
+		if b.options.CpuOptions.CoreCount != nil {
+			cpuOpts.CoreCount = b.options.CpuOptions.CoreCount
+			hasCpuOpts = true
+		}
+		if b.options.CpuOptions.ThreadsPerCore != nil {
+			cpuOpts.ThreadsPerCore = b.options.CpuOptions.ThreadsPerCore
+			hasCpuOpts = true
+		}
+		if b.options.CpuOptions.AmdSevSnp != nil {
+			cpuOpts.AmdSevSnp = ec2types.AmdSevSnpSpecification(lo.FromPtr(b.options.CpuOptions.AmdSevSnp))
+			hasCpuOpts = true
+		}
+		if b.options.CpuOptions.NestedVirtualization != nil {
+			cpuOpts.NestedVirtualization = ec2types.NestedVirtualizationSpecification(lo.FromPtr(b.options.CpuOptions.NestedVirtualization))
+			hasCpuOpts = true
+		}
+		if hasCpuOpts {
+			lt.LaunchTemplateData.CpuOptions = cpuOpts
+		}
+	}
 	// Gate this specifically since the update to CapacityReservationPreference will opt od / spot launches out of open
 	// ODCRs, which is a breaking change from the pre-native ODCR support behavior.
 	if b.LaunchMode(ctx) == LaunchModeTargeted {
