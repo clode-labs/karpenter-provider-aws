@@ -66,14 +66,18 @@ jobs:
           TAG: ${{ steps.tag.outputs.tag }}
           GOFLAGS: -ldflags=-X=sigs.k8s.io/karpenter/pkg/operator.Version=${{ steps.tag.outputs.tag }}
 
-      - name: Package and push karpenter-crd Helm chart
+      - name: Package and push Helm charts
         run: |
           VERSION="${TAG#v}"
-          # Set chart version
-          sed -i "s/^version:.*/version: ${VERSION}/" charts/karpenter-crd/Chart.yaml
-          sed -i "s/^appVersion:.*/appVersion: ${VERSION}/" charts/karpenter-crd/Chart.yaml
-          helm package charts/karpenter-crd --version "${VERSION}"
-          helm push "karpenter-crd-${VERSION}.tgz" "oci://${REGISTRY}/${GITHUB_REPOSITORY}"
+          OCI_REPO="oci://${REGISTRY}/${GITHUB_REPOSITORY}"
+
+          for CHART in karpenter-crd karpenter; do
+            sed -i "s/^version:.*/version: ${VERSION}/" "charts/${CHART}/Chart.yaml"
+            sed -i "s/^appVersion:.*/appVersion: ${VERSION}/" "charts/${CHART}/Chart.yaml"
+            helm package "charts/${CHART}" --version "${VERSION}"
+            helm push "${CHART}-${VERSION}.tgz" "${OCI_REPO}"
+            echo "Pushed ${CHART}:${VERSION} to ${OCI_REPO}"
+          done
         env:
           TAG: ${{ steps.tag.outputs.tag }}
           GITHUB_REPOSITORY: ${{ github.repository }}
